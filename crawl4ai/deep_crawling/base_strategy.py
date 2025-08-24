@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import AsyncGenerator, Optional, Set, List, Dict
 from functools import wraps
 from contextvars import ContextVar
-from ..types import AsyncWebCrawler, CrawlerRunConfig, CrawlResult, RunManyReturn
+from ..types import AsyncWebCrawler, CrawlerRunConfig, CrawlResult, RunManyReturn, BaseDispatcher
 
 
 class DeepCrawlDecorator:
@@ -16,7 +16,7 @@ class DeepCrawlDecorator:
 
     def __call__(self, original_arun):
         @wraps(original_arun)
-        async def wrapped_arun(url: str, config: CrawlerRunConfig = None, **kwargs):
+        async def wrapped_arun(url: str, config: CrawlerRunConfig = None, dispatcher: BaseDispatcher | None = None, **kwargs):
             # If deep crawling is already active, call the original method to avoid recursion.
             if config and config.deep_crawl_strategy and not self.deep_crawl_active.get():
                 token = self.deep_crawl_active.set(True)
@@ -24,7 +24,8 @@ class DeepCrawlDecorator:
                 result_obj = await config.deep_crawl_strategy.arun(
                     crawler=self.crawler,
                     start_url=url,
-                    config=config
+                    config=config,
+                    dispatcher=dispatcher
                 )
                 if config.stream:
                     async def result_wrapper():
@@ -59,6 +60,7 @@ class DeepCrawlStrategy(ABC):
         start_url: str,
         crawler: AsyncWebCrawler,
         config: CrawlerRunConfig,
+        dispatcher: BaseDispatcher | None = None,
     ) -> List[CrawlResult]:
         """
         Batch (non-streaming) mode:
@@ -72,6 +74,7 @@ class DeepCrawlStrategy(ABC):
         start_url: str,
         crawler: AsyncWebCrawler,
         config: CrawlerRunConfig,
+        dispatcher: BaseDispatcher | None = None,
     ) -> AsyncGenerator[CrawlResult, None]:
         """
         Streaming mode:
@@ -84,6 +87,7 @@ class DeepCrawlStrategy(ABC):
         start_url: str,
         crawler: AsyncWebCrawler,
         config: Optional[CrawlerRunConfig] = None,
+        dispatcher: BaseDispatcher | None = None,
     ) -> RunManyReturn:
         """
         Traverse the given URL using the specified crawler.
@@ -100,12 +104,12 @@ class DeepCrawlStrategy(ABC):
             raise ValueError("CrawlerRunConfig must be provided")
 
         if config.stream:
-            return self._arun_stream(start_url, crawler, config)
+            return self._arun_stream(start_url, crawler, config, dispatcher)
         else:
-            return await self._arun_batch(start_url, crawler, config)
+            return await self._arun_batch(start_url, crawler, config, dispatcher)
 
-    def __call__(self, start_url: str, crawler: AsyncWebCrawler, config: CrawlerRunConfig):
-        return self.arun(start_url, crawler, config)
+    def __call__(self, start_url: str, crawler: AsyncWebCrawler, config: CrawlerRunConfig, dispatcher: BaseDispatcher | None = None):
+        return self.arun(start_url, crawler, config, dispatcher=dispatcher)
 
     @abstractmethod
     async def shutdown(self) -> None:

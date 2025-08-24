@@ -9,7 +9,7 @@ from ..models import TraversalStats
 from .filters import FilterChain
 from .scorers import URLScorer
 from . import DeepCrawlStrategy  
-from ..types import AsyncWebCrawler, CrawlerRunConfig, CrawlResult
+from ..types import AsyncWebCrawler, CrawlerRunConfig, CrawlResult, BaseDispatcher
 from ..utils import normalize_url_for_deep_crawl, efficient_normalize_url_for_deep_crawl
 from math import inf as infinity
 
@@ -144,6 +144,7 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
         start_url: str,
         crawler: AsyncWebCrawler,
         config: CrawlerRunConfig,
+        dispatcher: BaseDispatcher | None = None,
     ) -> List[CrawlResult]:
         """
         Batch (non-streaming) mode:
@@ -167,7 +168,7 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
 
             # Clone the config to disable deep crawling recursion and enforce batch mode.
             batch_config = config.clone(deep_crawl_strategy=None, stream=False)
-            batch_results = await crawler.arun_many(urls=urls, config=batch_config)
+            batch_results = await crawler.arun_many(urls=urls, config=batch_config, dispatcher=dispatcher)
             
             # Update pages crawled counter - count only successful crawls
             successful_results = [r for r in batch_results if r.success]
@@ -196,6 +197,7 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
         start_url: str,
         crawler: AsyncWebCrawler,
         config: CrawlerRunConfig,
+        dispatcher: BaseDispatcher | None = None,
     ) -> AsyncGenerator[CrawlResult, None]:
         """
         Streaming mode:
@@ -211,7 +213,7 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
             visited.update(urls)
 
             stream_config = config.clone(deep_crawl_strategy=None, stream=True)
-            stream_gen = await crawler.arun_many(urls=urls, config=stream_config)
+            stream_gen = await crawler.arun_many(urls=urls, config=stream_config, dispatcher=dispatcher)
             
             # Keep track of processed results for this batch
             results_count = 0

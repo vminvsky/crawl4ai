@@ -10,7 +10,7 @@ from .filters import FilterChain
 from .scorers import URLScorer
 from . import DeepCrawlStrategy
 
-from ..types import AsyncWebCrawler, CrawlerRunConfig, CrawlResult, RunManyReturn
+from ..types import AsyncWebCrawler, CrawlerRunConfig, CrawlResult, RunManyReturn, BaseDispatcher
 from ..utils import normalize_url_for_deep_crawl
 
 from math import inf as infinity
@@ -131,6 +131,7 @@ class BestFirstCrawlingStrategy(DeepCrawlStrategy):
         start_url: str,
         crawler: AsyncWebCrawler,
         config: CrawlerRunConfig,
+        dispatcher: BaseDispatcher | None = None,
     ) -> AsyncGenerator[CrawlResult, None]:
         """
         Core best-first crawl method using a priority queue.
@@ -176,7 +177,7 @@ class BestFirstCrawlingStrategy(DeepCrawlStrategy):
             # Process the current batch of URLs.
             urls = [item[2] for item in batch]
             batch_config = config.clone(deep_crawl_strategy=None, stream=True)
-            stream_gen = await crawler.arun_many(urls=urls, config=batch_config)
+            stream_gen = await crawler.arun_many(urls=urls, config=batch_config, dispatcher=dispatcher)
             async for result in stream_gen:
                 result_url = result.url
                 # Find the corresponding tuple from the batch.
@@ -217,6 +218,7 @@ class BestFirstCrawlingStrategy(DeepCrawlStrategy):
         start_url: str,
         crawler: AsyncWebCrawler,
         config: CrawlerRunConfig,
+        dispatcher: BaseDispatcher | None = None,
     ) -> List[CrawlResult]:
         """
         Best-first crawl in batch mode.
@@ -224,7 +226,7 @@ class BestFirstCrawlingStrategy(DeepCrawlStrategy):
         Aggregates all CrawlResults into a list.
         """
         results: List[CrawlResult] = []
-        async for result in self._arun_best_first(start_url, crawler, config):
+        async for result in self._arun_best_first(start_url, crawler, config, dispatcher):
             results.append(result)
         return results
 
@@ -233,13 +235,14 @@ class BestFirstCrawlingStrategy(DeepCrawlStrategy):
         start_url: str,
         crawler: AsyncWebCrawler,
         config: CrawlerRunConfig,
+        dispatcher: BaseDispatcher | None = None,
     ) -> AsyncGenerator[CrawlResult, None]:
         """
         Best-first crawl in streaming mode.
         
         Yields CrawlResults as they become available.
         """
-        async for result in self._arun_best_first(start_url, crawler, config):
+        async for result in self._arun_best_first(start_url, crawler, config, dispatcher):
             yield result
 
     async def arun(
@@ -247,6 +250,7 @@ class BestFirstCrawlingStrategy(DeepCrawlStrategy):
         start_url: str,
         crawler: AsyncWebCrawler,
         config: Optional[CrawlerRunConfig] = None,
+        dispatcher: BaseDispatcher | None = None,
     ) -> "RunManyReturn":
         """
         Main entry point for best-first crawling.
@@ -257,9 +261,9 @@ class BestFirstCrawlingStrategy(DeepCrawlStrategy):
         if config is None:
             raise ValueError("CrawlerRunConfig must be provided")
         if config.stream:
-            return self._arun_stream(start_url, crawler, config)
+            return self._arun_stream(start_url, crawler, config, dispatcher)
         else:
-            return await self._arun_batch(start_url, crawler, config)
+            return await self._arun_batch(start_url, crawler, config, dispatcher)
 
     async def shutdown(self) -> None:
         """

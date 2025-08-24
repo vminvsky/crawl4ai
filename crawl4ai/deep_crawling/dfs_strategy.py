@@ -3,7 +3,7 @@ from typing import AsyncGenerator, Optional, Set, Dict, List, Tuple
 
 from ..models import CrawlResult
 from .bfs_strategy import BFSDeepCrawlStrategy  # noqa
-from ..types import AsyncWebCrawler, CrawlerRunConfig
+from ..types import AsyncWebCrawler, CrawlerRunConfig, BaseDispatcher
 
 class DFSDeepCrawlStrategy(BFSDeepCrawlStrategy):
     """
@@ -17,6 +17,7 @@ class DFSDeepCrawlStrategy(BFSDeepCrawlStrategy):
         start_url: str,
         crawler: AsyncWebCrawler,
         config: CrawlerRunConfig,
+        dispatcher: BaseDispatcher | None = None,
     ) -> List[CrawlResult]:
         """
         Batch (non-streaming) DFS mode.
@@ -36,7 +37,7 @@ class DFSDeepCrawlStrategy(BFSDeepCrawlStrategy):
 
             # Clone config to disable recursive deep crawling.
             batch_config = config.clone(deep_crawl_strategy=None, stream=False)
-            url_results = await crawler.arun_many(urls=[url], config=batch_config)
+            url_results = await crawler.arun_many(urls=[url], config=batch_config, dispatcher=dispatcher)
             
             for result in url_results:
                 result.metadata = result.metadata or {}
@@ -69,6 +70,7 @@ class DFSDeepCrawlStrategy(BFSDeepCrawlStrategy):
         start_url: str,
         crawler: AsyncWebCrawler,
         config: CrawlerRunConfig,
+        dispatcher: BaseDispatcher | None = None,
     ) -> AsyncGenerator[CrawlResult, None]:
         """
         Streaming DFS mode.
@@ -85,7 +87,7 @@ class DFSDeepCrawlStrategy(BFSDeepCrawlStrategy):
             visited.add(url)
 
             stream_config = config.clone(deep_crawl_strategy=None, stream=True)
-            stream_gen = await crawler.arun_many(urls=[url], config=stream_config)
+            stream_gen = await crawler.arun_many(urls=[url], config=stream_config, dispatcher=dispatcher)
             async for result in stream_gen:
                 result.metadata = result.metadata or {}
                 result.metadata["depth"] = depth
