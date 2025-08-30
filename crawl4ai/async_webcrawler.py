@@ -724,22 +724,62 @@ class AsyncWebCrawler:
                 ),
             )
 
+            
+        from types import SimpleNamespace
+        from collections.abc import Mapping
+
+        def _attach_dispatch(result_obj, dr):
+            """
+            Attach `dispatch_result` metadata to a variety of shapes:
+            - objects with __dict__: set attribute and return the object
+            - tuples: return a new tuple with dr appended
+            - mappings: copy to dict and add key
+            - everything else: wrap in a dict
+            """
+            # Objects that allow attributes
+            if hasattr(result_obj, "__dict__"):
+                setattr(result_obj, "dispatch_result", dr)
+                return result_obj
+
+            # Tuples/lists: append metadata
+            if isinstance(result_obj, tuple):
+                return (*result_obj, dr)
+            if isinstance(result_obj, list):
+                # attach to each element and return a list
+                return [_attach_dispatch(x, dr) for x in result_obj]
+
+            # Mappings -> dict with key
+            if isinstance(result_obj, Mapping):
+                d = dict(result_obj)
+                d["dispatch_result"] = dr
+                return d
+
+            # Strings/bytes/other immutables -> wrap
+            return {"result": result_obj, "dispatch_result": dr}
+
+
         def transform_result(task_result):
-            return (
-                setattr(
-                    task_result.result,
-                    "dispatch_result",
-                    DispatchResult(
-                        task_id=task_result.task_id,
-                        memory_usage=task_result.memory_usage,
-                        peak_memory=task_result.peak_memory,
-                        start_time=task_result.start_time,
-                        end_time=task_result.end_time,
-                        error_message=task_result.error_message,
-                    ),
+            def _dr_from_tr(tr):
+                return DispatchResult(
+                    task_id=tr.task_id,
+                    memory_usage=tr.memory_usage,
+                    peak_memory=tr.peak_memory,
+                    start_time=tr.start_time,
+                    end_time=tr.end_time,
+                    error_message=tr.error_message,
                 )
-                or task_result.result
-            )
+
+            # Many results at once
+            if isinstance(task_result, list):
+                out = []
+                for tr in task_result:
+                    dr = _dr_from_tr(tr)
+                    out.append(_attach_dispatch(tr.result, dr))
+                return out
+
+            # Single result
+            dr = _dr_from_tr(task_result)
+            return _attach_dispatch(task_result.result, dr)
 
         # Handle stream setting - use first config's stream setting if config is a list
         if isinstance(config, list):
@@ -748,7 +788,6 @@ class AsyncWebCrawler:
             stream = config.stream
 
         if stream:
-
             async def result_transformer():
                 async for task_result in dispatcher.run_urls_stream(
                     crawler=self, urls=urls, config=config

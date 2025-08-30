@@ -218,6 +218,7 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
             # Keep track of processed results for this batch
             results_count = 0
             async for result in stream_gen:
+                result = result[0]
                 url = result.url
                 depth = depths.get(url, 0)
                 result.metadata = result.metadata or {}

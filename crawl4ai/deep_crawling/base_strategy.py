@@ -17,29 +17,36 @@ class DeepCrawlDecorator:
     def __call__(self, original_arun):
         @wraps(original_arun)
         async def wrapped_arun(url: str, config: CrawlerRunConfig = None, dispatcher: BaseDispatcher | None = None, **kwargs):
-            # If deep crawling is already active, call the original method to avoid recursion.
-            if config and config.deep_crawl_strategy and not self.deep_crawl_active.get():
+            # If we're already in a deep crawl context, don't re-enter to avoid recursion
+            if self.deep_crawl_active.get(False):
+                return await original_arun(url, config=config, **kwargs)
+            
+            # If deep crawling is configured and not already active, proceed with deep crawling
+            if config and config.deep_crawl_strategy:
                 token = self.deep_crawl_active.set(True)
-                # Await the arun call to get the actual result object.
-                result_obj = await config.deep_crawl_strategy.arun(
-                    crawler=self.crawler,
-                    start_url=url,
-                    config=config,
-                    dispatcher=dispatcher
-                )
-                if config.stream:
-                    async def result_wrapper():
-                        try:
+                try:
+                    # Await the arun call to get the actual result object.
+                    result_obj = await config.deep_crawl_strategy.arun(
+                        crawler=self.crawler,
+                        start_url=url,
+                        config=config,
+                        dispatcher=dispatcher
+                    )
+                    if config.stream:
+                        async def result_wrapper():
                             async for result in result_obj:
                                 yield result
-                        finally:
-                            self.deep_crawl_active.reset(token)
-                    return result_wrapper()
-                else:
-                    try:
-                        return result_obj
-                    finally:
+                        # Reset token immediately for streaming since the generator
+                        # will run in different contexts
                         self.deep_crawl_active.reset(token)
+                        return result_wrapper()
+                    else:
+                        return result_obj
+                finally:
+                    # Only reset token if we're not in streaming mode
+                    if not (config and config.stream):
+                        self.deep_crawl_active.reset(token)
+            
             return await original_arun(url, config=config, **kwargs)
         return wrapped_arun
 

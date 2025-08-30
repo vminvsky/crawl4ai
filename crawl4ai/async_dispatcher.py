@@ -4,6 +4,7 @@ from .models import (
     CrawlResult,
     CrawlerTaskResult,
     CrawlStatus,
+    CrawlResultContainer,
     DomainState,
 )
 
@@ -17,6 +18,7 @@ import time
 import psutil
 import asyncio
 import uuid
+import traceback
 
 from urllib.parse import urlparse
 import random
@@ -235,6 +237,7 @@ class MemoryAdaptiveDispatcher(BaseDispatcher):
         start_time = time.time()
         error_message = ""
         memory_usage = peak_memory = 0.0
+        is_list = False
         
         # Select appropriate config for this URL
         selected_config = self.select_config(url, config)
@@ -318,32 +321,32 @@ class MemoryAdaptiveDispatcher(BaseDispatcher):
             
             # Execute the crawl with selected config
             result = await self.crawler.arun(url, config=selected_config, session_id=task_id)
-            
+
             # Measure memory usage
             end_memory = process.memory_info().rss / (1024 * 1024)
             memory_usage = peak_memory = end_memory - start_memory
-            
-            # Handle rate limiting
-            if self.rate_limiter and result.status_code:
-                if not self.rate_limiter.update_delay(url, result.status_code):
-                    error_message = f"Rate limit retry count exceeded for domain {urlparse(url).netloc}"
-                    if self.monitor:
-                        self.monitor.update_task(task_id, status=CrawlStatus.FAILED)
-                        
-            # Update status based on result
-            if not result.success:
-                error_message = result.error_message
-                if self.monitor:
-                    self.monitor.update_task(task_id, status=CrawlStatus.FAILED)
-            elif self.monitor:
-                self.monitor.update_task(task_id, status=CrawlStatus.COMPLETED)
                 
         except Exception as e:
-            error_message = str(e)
+            exc_type = type(e).__name__
+            tb = e.__traceback__
+            last_frame = traceback.extract_tb(tb)[-1] if tb else None
+            location = f" at {last_frame.filename}:{last_frame.lineno} in {last_frame.name}" if last_frame else ""
+            error_message = f"{exc_type}{location} - {e}"
             if self.monitor:
                 self.monitor.update_task(task_id, status=CrawlStatus.FAILED)
             result = CrawlResult(
-                url=url, html="", metadata={}, success=False, error_message=str(e)
+                url=url,
+                html="",
+                metadata={
+                    "status": "exception",
+                    "exception_type": exc_type,
+                    "traceback": traceback.format_exc(),
+                    "filename": last_frame.filename if last_frame else None,
+                    "lineno": last_frame.lineno if last_frame else None,
+                    "function": last_frame.name if last_frame else None,
+                },
+                success=False,
+                error_message=error_message,
             )
             
         finally:
@@ -358,7 +361,7 @@ class MemoryAdaptiveDispatcher(BaseDispatcher):
                     retry_count=retry_count
                 )
             self.concurrent_sessions -= 1
-            
+
         return CrawlerTaskResult(
             task_id=task_id,
             url=url,
@@ -460,7 +463,8 @@ class MemoryAdaptiveDispatcher(BaseDispatcher):
 
         except Exception as e:
             if self.monitor:
-                self.monitor.update_memory_status(f"QUEUE_ERROR: {str(e)}")                
+                self.monitor.update_memory_status(f"QUEUE_ERROR: {str(e)}")
+            raise
         
         finally:
             # Clean up
@@ -598,11 +602,8 @@ class MemoryAdaptiveDispatcher(BaseDispatcher):
                     
                     for completed_task in done:
                         result = await completed_task
-                        
-                        # Only count as completed if it wasn't requeued
-                        if "requeued" not in result.error_message:
-                            completed_count += 1
-                            yield result
+                        completed_count += 1
+                        yield result
                         
                     # Update active tasks list
                     active_tasks = list(pending)
@@ -714,11 +715,26 @@ class SemaphoreDispatcher(BaseDispatcher):
                     self.monitor.update_task(task_id, status=CrawlStatus.COMPLETED)
 
         except Exception as e:
-            error_message = str(e)
+            exc_type = type(e).__name__
+            tb = e.__traceback__
+            last_frame = traceback.extract_tb(tb)[-1] if tb else None
+            location = f" at {last_frame.filename}:{last_frame.lineno} in {last_frame.name}" if last_frame else ""
+            error_message = f"{exc_type}{location} - {e}"
             if self.monitor:
                 self.monitor.update_task(task_id, status=CrawlStatus.FAILED)
             result = CrawlResult(
-                url=url, html="", metadata={}, success=False, error_message=str(e)
+                url=url,
+                html="",
+                metadata={
+                    "status": "exception",
+                    "exception_type": exc_type,
+                    "traceback": traceback.format_exc(),
+                    "filename": last_frame.filename if last_frame else None,
+                    "lineno": last_frame.lineno if last_frame else None,
+                    "function": last_frame.name if last_frame else None,
+                },
+                success=False,
+                error_message=error_message,
             )
 
         finally:
