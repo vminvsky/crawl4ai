@@ -245,6 +245,7 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
                     # Check if we've reached the limit during batch processing
                     if self._pages_crawled >= self.max_pages:
                         self.logger.info(f"Max pages limit ({self.max_pages}) reached during batch, stopping crawl")
+                        self._pages_crawled = 0
                         break  # Exit the generator
                 
                 results_count += 1
