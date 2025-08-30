@@ -218,7 +218,7 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
             # to filter personal sites in case they are hosted else where.
             url_path = urlparse(start_url).path.split(".")[0]
 
-            if url_path != "":
+            if url_path and not stream_config.include_external:
                 filter_chain = FilterChain([
                         # Only follow URLs with specific patterns
                         URLPatternFilter(patterns=[f"*{url_path}*"])
