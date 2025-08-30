@@ -214,11 +214,11 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
 
             stream_config = config.clone(deep_crawl_strategy=None, stream=True)
 
-
             # this was done by veniamin
             # to filter personal sites in case they are hosted else where.
+            print(start_url)
             url_path = urlparse(start_url).path.split(".")[0]
-
+            print(url_path)
             if url_path and stream_config.exclude_external_links:
                 filter_chain = FilterChain([
                         # Only follow URLs with specific patterns
