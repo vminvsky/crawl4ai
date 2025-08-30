@@ -214,11 +214,12 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
 
             stream_config = config.clone(deep_crawl_strategy=None, stream=True)
 
+
             # this was done by veniamin
             # to filter personal sites in case they are hosted else where.
             url_path = urlparse(start_url).path.split(".")[0]
 
-            if url_path and not stream_config.include_external:
+            if url_path and stream_config.exclude_external_links:
                 filter_chain = FilterChain([
                         # Only follow URLs with specific patterns
                         URLPatternFilter(patterns=[f"*{url_path}*"])
@@ -227,7 +228,7 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
                 stream_config.filter_chain = filter_chain
 
             stream_gen = await crawler.arun_many(urls=urls, config=stream_config, dispatcher=dispatcher)
-            
+                
             # Keep track of processed results for this batch
             results_count = 0
             async for result in stream_gen:
