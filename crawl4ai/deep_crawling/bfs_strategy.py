@@ -216,9 +216,7 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
 
             # this was done by veniamin
             # to filter personal sites in case they are hosted else where.
-            print(start_url)
             url_path = urlparse(start_url).path.split(".")[0]
-            print(url_path)
             if url_path and stream_config.exclude_external_links:
                 filter_chain = FilterChain([
                         # Only follow URLs with specific patterns
@@ -226,6 +224,7 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
                     ])
 
                 stream_config.filter_chain = filter_chain
+                self.filter_chain = filter_chain
 
             stream_gen = await crawler.arun_many(urls=urls, config=stream_config, dispatcher=dispatcher)
                 
