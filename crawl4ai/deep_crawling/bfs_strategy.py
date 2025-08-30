@@ -6,7 +6,7 @@ from typing import AsyncGenerator, Optional, Set, Dict, List, Tuple
 from urllib.parse import urlparse
 
 from ..models import TraversalStats
-from .filters import FilterChain
+from .filters import FilterChain, URLPatternFilter
 from .scorers import URLScorer
 from . import DeepCrawlStrategy  
 from ..types import AsyncWebCrawler, CrawlerRunConfig, CrawlResult, BaseDispatcher
