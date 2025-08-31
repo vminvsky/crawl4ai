@@ -24,6 +24,10 @@ from urllib.parse import urlparse
 import random
 from abc import ABC, abstractmethod
 
+import logging
+logger = logging.getLogger(__name__)
+
+
 from .utils import get_true_memory_usage_percent
 
 
@@ -541,13 +545,14 @@ class MemoryAdaptiveDispatcher(BaseDispatcher):
         
         # Start the memory monitor task
         memory_monitor = asyncio.create_task(self._memory_monitor_task())
-        
+
         if self.monitor:
             self.monitor.start()
             
         try:
             # Initialize task queue
             for url in urls:
+
                 task_id = str(uuid.uuid4())
                 if self.monitor:
                     self.monitor.add_task(task_id, url)
@@ -557,6 +562,7 @@ class MemoryAdaptiveDispatcher(BaseDispatcher):
             active_tasks = []
             completed_count = 0
             total_urls = len(urls)
+
 
             while completed_count < total_urls:
                 if memory_monitor.done():
