@@ -6,9 +6,9 @@ from typing import AsyncGenerator, Optional, Set, Dict, List, Tuple
 from urllib.parse import urlparse
 
 from ..models import TraversalStats
-from .filters import FilterChain, URLPatternFilter
+from .filters import FilterChain, URLPatternFilter, ContentTypeFilter
 from .scorers import URLScorer
-from . import DeepCrawlStrategy  
+from . import DeepCrawlStrategy
 from ..types import AsyncWebCrawler, CrawlerRunConfig, CrawlResult, BaseDispatcher
 from ..utils import normalize_url_for_deep_crawl, efficient_normalize_url_for_deep_crawl
 from math import inf as infinity
@@ -16,7 +16,7 @@ from math import inf as infinity
 class BFSDeepCrawlStrategy(DeepCrawlStrategy):
     """
     Breadth-First Search deep crawling strategy.
-    
+
     Core functions:
       - arun: Main entry point; splits execution into batch or stream modes.
       - link_discovery: Extracts, filters, and (if needed) scores the outgoing URLs.
@@ -26,7 +26,7 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
         self,
         max_depth: int,
         filter_chain: FilterChain = FilterChain(),
-        url_scorer: Optional[URLScorer] = None,        
+        url_scorer: Optional[URLScorer] = None,
         include_external: bool = False,
         score_threshold: float = -infinity,
         max_pages: int = infinity,
@@ -79,7 +79,7 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
         prepares the next level of URLs.
         Each valid URL is appended to next_level as a tuple (url, parent_url)
         and its depth is tracked.
-        """            
+        """
         next_depth = current_depth + 1
         if next_depth > self.max_depth:
             return
@@ -96,7 +96,7 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
             links += result.links.get("external", [])
 
         valid_links = []
-        
+
         # First collect all valid links
         for link in links:
             url = link.get("href")
@@ -111,16 +111,19 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
 
             # Score the URL if a scorer is provided
             score = self.url_scorer.score(base_url) if self.url_scorer else 0
-            
+
             # Skip URLs with scores below the threshold
             if score < self.score_threshold:
                 self.logger.debug(f"URL {url} skipped: score {score} below threshold {self.score_threshold}")
                 self.stats.urls_skipped += 1
                 continue
 
+            if "pdf" in url:
+                continue
+
             visited.add(base_url)
             valid_links.append((base_url, score))
-        
+
         # If we have more valid links than capacity, sort by score and take the top ones
         if len(valid_links) > remaining_capacity:
             if self.url_scorer:
@@ -129,7 +132,7 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
             # Take only as many as we have capacity for
             valid_links = valid_links[:remaining_capacity]
             self.logger.info(f"Limiting to {remaining_capacity} URLs due to max_pages limit")
-            
+
         # Process the final selected links
         for url, score in valid_links:
             # attach the score to metadata if needed
@@ -162,18 +165,18 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
             if self._pages_crawled >= self.max_pages:
                 self.logger.info(f"Max pages limit ({self.max_pages}) reached, stopping crawl")
                 break
-            
+
             next_level: List[Tuple[str, Optional[str]]] = []
             urls = [url for url, _ in current_level]
 
             # Clone the config to disable deep crawling recursion and enforce batch mode.
             batch_config = config.clone(deep_crawl_strategy=None, stream=False)
             batch_results = await crawler.arun_many(urls=urls, config=batch_config, dispatcher=dispatcher)
-            
+
             # Update pages crawled counter - count only successful crawls
             successful_results = [r for r in batch_results if r.success]
             self._pages_crawled += len(successful_results)
-            
+
             for result in batch_results:
                 url = result.url
                 depth = depths.get(url, 0)
@@ -182,7 +185,7 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
                 parent_url = next((parent for (u, parent) in current_level if u == url), None)
                 result.metadata["parent_url"] = parent_url
                 results.append(result)
-                
+
                 # Only discover links from successful crawls
                 if result.success:
                     # Link discovery will handle the max pages limit internally
@@ -220,47 +223,49 @@ class BFSDeepCrawlStrategy(DeepCrawlStrategy):
             if url_path and stream_config.exclude_external_links:
                 filter_chain = FilterChain([
                         # Only follow URLs with specific patterns
-                        URLPatternFilter(patterns=[f"*{url_path}*"])
+                        URLPatternFilter(patterns=[f"*{url_path}*"]),
+                        URLPatternFilter(patterns=["*.pdf", "*.jpg"], reverse=True),
+                        ContentTypeFilter(allowed_types=["text/html"])
                     ])
 
                 stream_config.filter_chain = filter_chain
                 self.filter_chain = filter_chain
 
             stream_gen = await crawler.arun_many(urls=urls, config=stream_config, dispatcher=dispatcher)
-                
+
             # Keep track of processed results for this batch
             results_count = 0
-            async for result in stream_gen:
-                result = result[0]
-                url = result.url
-                depth = depths.get(url, 0)
-                result.metadata = result.metadata or {}
-                result.metadata["depth"] = depth
-                parent_url = next((parent for (u, parent) in current_level if u == url), None)
-                result.metadata["parent_url"] = parent_url
-                
-                # Count only successful crawls
-                if result.success:
-                    self._pages_crawled += 1
-                    # Check if we've reached the limit during batch processing
-                    if self._pages_crawled >= self.max_pages:
-                        self.logger.info(f"Max pages limit ({self.max_pages}) reached during batch, stopping crawl")
-                        self._pages_crawled = 0
-                        break  # Exit the generator
-                
-                results_count += 1
-                yield result
-                
-                # Only discover links from successful crawls
-                if result.success:
-                    # Link discovery will handle the max pages limit internally
-                    await self.link_discovery(result, url, depth, visited, next_level, depths)
-            
+            async for results in stream_gen:
+                for result in results:
+                    url = result.url
+                    depth = depths.get(url, 0)
+                    result.metadata = result.metadata or {}
+                    result.metadata["depth"] = depth
+                    parent_url = next((parent for (u, parent) in current_level if u == url), None)
+                    result.metadata["parent_url"] = parent_url
+
+                    # Count only successful crawls
+                    if result.success:
+                        self._pages_crawled += 1
+                        # Check if we've reached the limit during batch processing
+                        if self._pages_crawled >= self.max_pages:
+                            self.logger.info(f"Max pages limit ({self.max_pages}) reached during batch, stopping crawl")
+                            self._pages_crawled = 0
+                            break  # Exit the generator
+
+                    results_count += 1
+                    yield result
+
+                    # Only discover links from successful crawls
+                    if result.success:
+                        # Link discovery will handle the max pages limit internally
+                        await self.link_discovery(result, url, depth, visited, next_level, depths)
+
             # If we didn't get results back (e.g. due to errors), avoid getting stuck in an infinite loop
             # by considering these URLs as visited but not counting them toward the max_pages limit
             if results_count == 0 and urls:
                 self.logger.warning(f"No results returned for {len(urls)} URLs, marking as visited")
-                
+
             current_level = next_level
 
     async def shutdown(self) -> None:

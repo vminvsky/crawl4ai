@@ -454,7 +454,7 @@ class DomainFilter(URLFilter):
         if isinstance(domains, str):
             return {domains.lower()}
         return {d.lower() for d in domains}
-    
+
     @staticmethod
     def _is_subdomain(domain: str, parent_domain: str) -> bool:
         """Check if domain is a subdomain of parent_domain"""

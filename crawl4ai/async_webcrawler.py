@@ -164,7 +164,7 @@ class AsyncWebCrawler:
         # Decorate arun method with deep crawling capabilities
         self._deep_handler = DeepCrawlDecorator(self)
         self.arun = self._deep_handler(self.arun)
-        
+
         self.url_seeder: Optional[AsyncUrlSeeder] = None
 
     async def start(self):
@@ -724,7 +724,7 @@ class AsyncWebCrawler:
                 ),
             )
 
-            
+
         from types import SimpleNamespace
         from collections.abc import Mapping
 
@@ -848,13 +848,13 @@ class AsyncWebCrawler:
             self.url_seeder = AsyncUrlSeeder(
                 base_directory=self.crawl4ai_folder,
                 logger=self.logger
-            )                    
+            )
 
         # Merge config object with direct kwargs, giving kwargs precedence
         seeding_config = config.clone(**kwargs) if config else SeedingConfig.from_kwargs(kwargs)
-        
+
         # Ensure base_directory is set for the seeder's cache
-        seeding_config.base_directory = seeding_config.base_directory or self.crawl4ai_folder        
+        seeding_config.base_directory = seeding_config.base_directory or self.crawl4ai_folder
         # Ensure the seeder uses the crawler's logger (if not already set)
         if not self.url_seeder.logger:
             self.url_seeder.logger = self.logger

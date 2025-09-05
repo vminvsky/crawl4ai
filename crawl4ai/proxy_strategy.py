@@ -16,7 +16,7 @@ class ProxyConfig:
         ip: Optional[str] = None,
     ):
         """Configuration class for a single proxy.
-        
+
         Args:
             server: Proxy server URL (e.g., "http://127.0.0.1:8080")
             username: Optional username for proxy authentication
@@ -26,10 +26,10 @@ class ProxyConfig:
         self.server = server
         self.username = username
         self.password = password
-        
+
         # Extract IP from server if not explicitly provided
         self.ip = ip or self._extract_ip_from_server()
-    
+
     def _extract_ip_from_server(self) -> Optional[str]:
         """Extract IP address from server URL."""
         try:
@@ -42,7 +42,7 @@ class ProxyConfig:
                 return parts[0]
         except Exception:
             return None
-    
+
     @staticmethod
     def from_string(proxy_str: str) -> "ProxyConfig":
         """Create a ProxyConfig from a string in the format 'ip:port:username:password'."""
@@ -63,7 +63,7 @@ class ProxyConfig:
             )
         else:
             raise ValueError(f"Invalid proxy string format: {proxy_str}")
-    
+
     @staticmethod
     def from_dict(proxy_dict: Dict) -> "ProxyConfig":
         """Create a ProxyConfig from a dictionary."""
@@ -73,14 +73,14 @@ class ProxyConfig:
             password=proxy_dict.get("password"),
             ip=proxy_dict.get("ip")
         )
-    
+
     @staticmethod
     def from_env(env_var: str = "PROXIES") -> List["ProxyConfig"]:
         """Load proxies from environment variable.
-        
+
         Args:
             env_var: Name of environment variable containing comma-separated proxy strings
-            
+
         Returns:
             List of ProxyConfig objects
         """
@@ -94,7 +94,7 @@ class ProxyConfig:
         except Exception as e:
             print(f"Error loading proxies from environment: {e}")
         return proxies
-    
+
     def to_dict(self) -> Dict:
         """Convert to dictionary representation."""
         return {
@@ -103,7 +103,7 @@ class ProxyConfig:
             "password": self.password,
             "ip": self.ip
         }
-    
+
     def clone(self, **kwargs) -> "ProxyConfig":
         """Create a copy of this configuration with updated values.
 
@@ -120,7 +120,7 @@ class ProxyConfig:
 
 class ProxyRotationStrategy(ABC):
     """Base abstract class for proxy rotation strategies"""
-    
+
     @abstractmethod
     async def get_next_proxy(self) -> Optional[ProxyConfig]:
         """Get next proxy configuration from the strategy"""
@@ -137,7 +137,7 @@ class RoundRobinProxyStrategy:
     def __init__(self, proxies: List[ProxyConfig] = None):
         """
         Initialize with optional list of proxy configurations
-        
+
         Args:
             proxies: List of ProxyConfig objects
         """
